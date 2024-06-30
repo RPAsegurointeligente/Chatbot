@@ -17,6 +17,7 @@ async function runAssis(id){
       run = await openai.beta.threads.runs.retrieve(run.thread_id, run.id);
   }
   console.log('RUN*********', run)
+  if(run.status === 'failed') return 'Estado fallido'
   if(run.status === 'requires_action'){
     console.log(run.required_action.submit_tool_outputs.tool_calls[0])
     console.log(run.required_action.submit_tool_outputs.tool_calls[0].function.name)

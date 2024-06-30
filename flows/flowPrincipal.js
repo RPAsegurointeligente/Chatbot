@@ -9,9 +9,11 @@ const {truncate, returnName} = require('./Validaciones.js')
 const {viewLead,addLead,addLeadALL,addNote} = require('../APIs/zohoCRM.js')
 const {createTicket,createTicketEO} = require('../APIs/zohoDesk.js')
 const { jidDecode } = require('@whiskeysockets/baileys')
+
 const USER_DATA = {}
 const TICKET = {}
 const USER_POLIZA = {}
+
 const ESTADO_ASEGURADORAS = {
     AXA: true,
     MAPFRE: true,
@@ -21,22 +23,11 @@ const ESTADO_ASEGURADORAS = {
     GNP: true
   };
 
-  const flujoInactividad = addKeyword(EVENTS.ACTION).addAnswer('!Hasta luego¡ 👋 te recuerdo que estoy para apoyarte 🤖\n\n',null, async (ctx,{endFlow}) => {
-    try {
-      await deleteThreads(USER_DATA[ctx.from].id);
-      delete USER_DATA[ctx.from];
-      //FALTA ELIMINAR HILO DEL USUARIO
-      console.log('se elimino instancia e hilo del usuario', ctx.from)
-    } catch (error) {
-      console.log('Error al eliminar instancia del usuario', ctx.from)
-    }
-    return endFlow('Si requieres que te apoye en algo, recuerda activarme mandando un *Hola*')
-  })
+const flujoInactividad = addKeyword(EVENTS.ACTION).addAnswer('!Hasta luego¡ 👋 te recuerdo que estoy para apoyarte 🤖')
 
 
 const inicializacion = async (id) => {
     if (USER_DATA[id]) return;
-    // Bloqueamos la inicialización hasta que todos los campos estén listos.
     USER_DATA[id] = await new Promise(async (resolve) => {
         resolve({
             response: null,
@@ -98,6 +89,7 @@ const inicializacion = async (id) => {
 
 
 const flowApagar = addKeyword('######################').addAnswer('\n\n*DESCRIPCION:*\nSELECCIONA EL NUMERO DE LA ASEGURADORA PARA CAMBIAR AL ESTADO CONTRARIO ACTUAL', {capture:true, delay: 1500}, async (ctx, {fallBack, flowDynamic, endFlow}) => {
+    
     switch (ctx.body) {
         case '1':
             ESTADO_ASEGURADORAS.AXA = !ESTADO_ASEGURADORAS.AXA
@@ -120,9 +112,10 @@ const flowApagar = addKeyword('######################').addAnswer('\n\n*DESCRIPC
         default:
             if(['menu','Menu','Menú'].includes(ctx.body)) return;
             return fallBack('Ingresa una opcion valida ', ctx.body)
+
     }
 
-    await flowDynamic('Los nuevos estados son estos')
+    await flowDynamic('Los nuevos estados son estos :')
     await flowDynamic(`
     ${(ESTADO_ASEGURADORAS.AXA)?'AXA '+ '🟢' :'AXA '+ '⚪'}
     ${(ESTADO_ASEGURADORAS.CHUBB)?'CHUBB '+ '🟢' :'CHUBB '+ '⚪'}
@@ -139,9 +132,10 @@ const flowApagar = addKeyword('######################').addAnswer('\n\n*DESCRIPC
 
 
 const flowConfiguracion = addKeyword('#################################').addAnswer('BIENVENIDO AL MENÙ DE CONFIGURACIÒN *ON/OFF* DE ASEGURADORAS ⚙️', null, async (ctx, {flowDynamic, endFlow, gotoFlow}) => {
-    console.log(ctx.from)
+
     if(!['5215529188778', '5215614562120'].includes(ctx.from)) return await flowDynamic('Lo siento no tienes permiso, para ingresar a esta configuracion 🔒⚠️')
-    await flowDynamic('Este es el estado actual de todas las aseguradoras')
+
+    await flowDynamic('Este es el estado actual de todas las aseguradoras :')
     await flowDynamic(`
         ${(ESTADO_ASEGURADORAS.AXA)?'1️⃣ AXA '+ '🟢' :'1️⃣ AXA '+ '⚪'}
         ${(ESTADO_ASEGURADORAS.CHUBB)?'2️⃣ CHUBB '+ '🟢' :'2️⃣ CHUBB '+ '⚪'}
@@ -151,7 +145,6 @@ const flowConfiguracion = addKeyword('#################################').addAns
         ${(ESTADO_ASEGURADORAS.GNP)?'6️⃣ GNP '+ '🟢' :'6️⃣ GNP '+ '⚪'}
     `)
     return gotoFlow(flowApagar)
-    //await flowDynamic('1️⃣ AXA \n\n2️⃣ CHUBB \n\n3️⃣ ANA \n\n4️⃣ QUALITAS \n\n5️⃣ MAPFRE \n\n*DESCRIPCION:*\nSELECCIONA EL NUMERO DE LA ASEGURADORA PARA CAMBIAR AL ESTADO CONTRARIO ACTUAL')
 },[flowApagar])
 
 const flowEjecutivo = addKeyword('#######################################')
@@ -177,10 +170,13 @@ const flowEjecutivo = addKeyword('#######################################')
     })
 
 const flowContratar = addKeyword('#############################')
-    .addAnswer('Por favor, escribe solo el nombre de la aseguradora a contratar, Ejemplo: *AXA*.', {capture: true, delay: 1500, idle: 300000}, async (ctx, {fallBack, flowDynamic, endFlow, gotoFlow}) => {
+    .addAnswer('Por favor, escribe solo el nombre de la aseguradora a contratar, Ejemplo: *AXA*.', {capture: true, delay: 1500, idle: 300000}, async (ctx, {fallBack, flowDynamic,gotoFlow}) => {
         if (ctx?.idleFallBack) {
+            await addLead(USER_DATA[ctx.from].telefono, USER_DATA[ctx.from].nombre, USER_DATA[ctx.from].correo, 'Inactividad: El usuario no proporcionó la aseguradora a contratar para su vehículo.');
+
             await deleteThreads(USER_DATA[ctx.from].id);
             delete USER_DATA[ctx.from];
+
             return gotoFlow(flujoInactividad);
         }
         const aseguradoras = ['CHUBB', 'MAPFRE', 'GNP', 'ANA', 'QUALITAS', 'AXA'];
@@ -206,18 +202,21 @@ const flowContratar = addKeyword('#############################')
         await flowDynamic('Para regresar al menu principal, solo escribe *menu*');
     });
 
-const flowEnd = addKeyword('#################')
-    .addAnswer('Lo siento al parecer no existe cotización para tu vehículo\n\nSi gustas te puedes comunicar al número 5530987211 y uno de nuestros ejecutivos te atendera', null, async (ctx, {endFlow}) => {
-        await deleteThreads(USER_DATA[ctx.from].id);
-        delete USER_DATA[ctx.from];
-        return endFlow('Para regresar al menu principal, solo escribe *menu*');
-    });
+const flowEnd = addKeyword('#################').addAnswer('Lo siento al parecer no existe cotización para tu vehículo\n\nSi gustas te puedes comunicar al número 5530987211 y uno de nuestros ejecutivos te atendera', null, async (ctx, {endFlow}) => {
+    await addLead(USER_DATA[ctx.from].telefono, USER_DATA[ctx.from].nombre, USER_DATA[ctx.from].correo, `No se encontró cotización para el vehículo del cliente, Marca: ${USER_DATA[ctx.from].marca} , Modelo: ${USER_DATA[ctx.from].modelo} , Submarca: ${USER_DATA[ctx.from].submarca}`);    
+    await deleteThreads(USER_DATA[ctx.from].id);
+    delete USER_DATA[ctx.from];
+    return endFlow('Para regresar al menu principal, solo escribe *menu*');
+});
 
 const flowCotizacionAseguradoras = addKeyword('########################')
-    .addAnswer('Un momento voy a consultar las cotizaciones que tenemos para ti', null, async (ctx, {flowDynamic, gotoFlow, endFlow}) => {
+    .addAnswer('Un momento voy a consultar las cotizaciones que tenemos para ti', null, async (ctx, {flowDynamic, gotoFlow}) => {
         const aseguradoras = ['CHUBB', 'MAPFRE', 'GNP', 'ANA', 'QUALITAS', 'AXA'];
+
         (USER_DATA[ctx.from].genero === 'MASCULINO') ? USER_DATA[ctx.from].generoAPI = '0' : USER_DATA[ctx.from].generoAPI = '1';
+
         console.log('DATOS ANTES DE LA COTIZACION', USER_DATA[ctx.from].marca, USER_DATA[ctx.from].modelo, USER_DATA[ctx.from].submarca, USER_DATA[ctx.from].codigo_postal, new Date(USER_DATA[ctx.from].fecha_nacimiento).toISOString(), USER_DATA[ctx.from].generoAPI, 'QUAA740806BX9');
+        
         try {
             USER_DATA[ctx.from].DATA = await getCotizar(USER_DATA[ctx.from].marca, USER_DATA[ctx.from].modelo, USER_DATA[ctx.from].submarca, USER_DATA[ctx.from].codigo_postal, new Date(USER_DATA[ctx.from].fecha_nacimiento).toISOString(), USER_DATA[ctx.from].generoAPI, 'QUAA740806BX9');
             if (USER_DATA[ctx.from].DATA.cotizacionInfo[0].primaTotal < 1500 && USER_DATA[ctx.from].DATA.cotizacionInfo[1].primaTotal < 1500 && USER_DATA[ctx.from].DATA.cotizacionInfo[2].primaTotal < 1500 && USER_DATA[ctx.from].DATA.cotizacionInfo[3].primaTotal < 1500 && USER_DATA[ctx.from].DATA.cotizacionInfo[4].primaTotal < 1500 && USER_DATA[ctx.from].DATA.cotizacionInfo[5].primaTotal < 1500) {
@@ -298,18 +297,22 @@ const flowSeguimiento = addKeyword('####################################')
 const flowConsultaPoliza = addKeyword('############################################3')
     .addAnswer('Introduce tu numero de poliza', null, async (ctx, {fallBack, flowDynamic, state, endFlow, gotoFlow}) => {
         await state.update({poliza: USER_DATA[ctx.from].consulta_poliza});
+
         USER_POLIZA[ctx.from] = {policy: state.getMyState(), search: null, send: null, cut: null};
         USER_POLIZA[ctx.from].search = await searchPolicy(USER_POLIZA[ctx.from].policy.poliza);
-        console.log(USER_POLIZA[ctx.from].search);
+
         if (USER_POLIZA[ctx.from].search.error) return await flowDynamic('Lo siento, tengo problemas para procesar tu solicitud. Intenta más tarde');
+        
         if (USER_POLIZA[ctx.from].search.MENSAJE === 'SIN DATOS PARA MOSTRAR') {
             await createTicket(USER_POLIZA[ctx.from].policy.poliza, USER_DATA[ctx.from].nombre, USER_DATA[ctx.from].telefono);
             await flowDynamic('Lo siento no he podido encontrar tu poliza');
             await flowDynamic('Para regresar al menu principal, solo escribe *menu*');
             return;
         }
+        
         USER_POLIZA[ctx.from].send = await sendPolicy(USER_POLIZA[ctx.from].policy.poliza, USER_POLIZA[ctx.from].search.Correo);
         if (USER_POLIZA[ctx.from].send.error) return await flowDynamic('Lo siento tengo problemas para procesar tu solicitud. Intenta más tarde');
+        
         if (USER_POLIZA[ctx.from].send.status === 200 && USER_POLIZA[ctx.from].send.data.d === `Correo enviado exitosamente a ${USER_POLIZA[ctx.from].search.Correo}`) {
             USER_POLIZA[ctx.from].cut = USER_POLIZA[ctx.from].search.Correo.split('@');
             await flowDynamic(`Tu poliza fue enviada al correo con terminación: ${'*'.repeat(USER_POLIZA[ctx.from].cut[0].length)}@${USER_POLIZA[ctx.from].cut[1]}`);
@@ -332,9 +335,7 @@ const flowComprobante = addKeyword('############################################
         '👉 Copia de identificacion oficial(Reverso)'
     ])
     .addAnswer('👉 Ademas no olvides llenar tu Carta de No Siniestro: solo en caso de exceder el periodo de gracia de tu póliza o si tienes 2 o más recibos pendientes de pago.')
-    .addAnswer('pdf', {
-        media: 'C:/Users/Gmag/Desktop/Comercio AI/base-baileys-memory/Documents/CARTA_NO_SINIESTRO.pdf'
-    })
+    .addAnswer('Descargala en el siguiente enlace 👉 : https://legacy.segurointeligente.mx/Resources/media/Formato_CARTA_NO_SINIESTRO.pdf')
     .addAnswer('Para regresar al menu principal escribe *menu*', null, async (ctx) => {
         await deleteThreads(USER_DATA[ctx.from].id);
         delete USER_DATA[ctx.from];
@@ -344,29 +345,32 @@ const flowComprobante = addKeyword('############################################
 
 const flowStatus = addKeyword('#################################')
     .addAnswer('Permíteme un momento, deja consulto el status de tu poliza', null, async (ctx, {state, flowDynamic, endFlow}) => {
-        console.log('POLIZA EN EL FLOW DE ESTATUS', USER_DATA[ctx.from].polizaStatus);
+
         await state.update({search: await searchPolicy(USER_DATA[ctx.from].polizaStatus)});
         const myState = state.getMyState();
-        console.log(myState.search);
+
         if (myState.search.MENSAJE && myState.search.MENSAJE === "SIN DATOS PARA MOSTRAR" || myState.search.Status === '') {
             await createTicket(USER_DATA[ctx.from].polizaStatus, USER_DATA[ctx.from].nombre, USER_DATA[ctx.from].telefono);
             return await flowDynamic('Lo siento no he podido consultar tu estatus, intenta más tarde\n\nPara regresar al menu principal escribe *menu*');
             
         }
+
         if (myState.search.Status && myState.search.Status != '') {
+
             await flowDynamic(`El estatus de poliza es el siguiente: *${myState.search.Status}*\nCon una vigencia hasta: *${myState.search.Hasta}*\n\nPara regresar al menu principal escribe *menu*`);
             await createTicketEO(`Chatbot_Comercio_Conversacional_Solicitud de estatus`);
+           
             myState.search = null;
+            
             await deleteThreads(USER_DATA[ctx.from].id);
             delete USER_DATA[ctx.from];
-            await flowDynamic('Para regresar al menu principal, solo escribe *menu*');
-            return;
+            return await flowDynamic('Para regresar al menu principal, solo escribe *menu*');
+            
         }
-        await flowDynamic('Para regresar al menu principal, solo escribe *menu*');
-        return;
+        return await flowDynamic('Para regresar al menu principal, solo escribe *menu*');
     });
 
-//¡Hola! 👋  Soy el Asistente virtual de Seguro Inteligente. 🤖\n\nSelecciona la opción deseada solo con el número correspondiente:\n1️⃣ Nueva cotización.\n2️⃣ Seguimiento a una cotización\n3️⃣ Descarga, consulta de póliza, comprobante de pagos...\n\nSi deseas hablar con un asesor, escribe la palabra "EJECUTIVO" y en breve te contactaremos
+
 const flowPrincipal = addKeyword(['hola', 'menu', 'menù'])
     .addAnswer(' ', null, async (ctx, {flowDynamic, state}) => {
         await inicializacion(ctx.from);
@@ -389,22 +393,25 @@ const flowPrincipal = addKeyword(['hola', 'menu', 'menù'])
 
             USER_DATA[ctx.from].myState = state.getMyState();
             console.log('MENU', USER_DATA[ctx.from].myState.asis);
+            if(USER_DATA[ctx.from].myState.asis === 'Estado fallido') return await flowDynamic('Lo siento, por el momento no me encuentro disponible. Si deseas alguna consulta, por favor comunícate al siguiente número: 5530987211')
             await flowDynamic(USER_DATA[ctx.from].myState.asis);
             USER_DATA[ctx.from].myState = null;
         }
     })
-    .addAnswer('Selecciona una opción', {capture: true, idle: 300000}, async (ctx, {fallBack, state, endFlow, gotoFlow}) => {
+    .addAnswer('Selecciona una opción', {capture: true, idle: 60000}, async (ctx, {fallBack, state, endFlow, gotoFlow}) => {
         if (ctx?.idleFallBack) {
+
             await deleteThreads(USER_DATA[ctx.from].id);
             delete USER_DATA[ctx.from];
-            await addLead('0000000000', 'Inactividad', 'gmeneses@segurointeligente.mx', 'Inactividad por usuario');
-
+            //await addLead('0000000000', 'Inactividad', 'gmeneses@segurointeligente.mx', 'Inactividad por usuario');
             return gotoFlow(flujoInactividad);
         }
         console.log(ctx);
         try {
+
             await state.update({add: await messages(USER_DATA[ctx.from].id, ctx.body)});
             await state.update({asis: await runAssis(USER_DATA[ctx.from].id)});
+
             const myState3 = state.getMyState();
             console.log('Valor del tercer estado', myState3.asis);
             console.log('valida si es objeto', Object.hasOwn(myState3.asis, 'name'));
@@ -413,12 +420,15 @@ const flowPrincipal = addKeyword(['hola', 'menu', 'menù'])
             if (Object.hasOwn(myState3.asis, 'name')) {
                 switch (myState3.asis.name) {
                     case 'get_status_poliza':
+
                         USER_DATA[ctx.from].argumentos = JSON.parse(myState3.asis.arguments);
                         USER_DATA[ctx.from].polizaStatus = USER_DATA[ctx.from].argumentos.poliza;
                         USER_DATA[ctx.from].nombre = USER_DATA[ctx.from].argumentos.nombre_y_apellidos;
                         USER_DATA[ctx.from].telefono = USER_DATA[ctx.from].argumentos.telefono;
                         return gotoFlow(flowStatus);
+
                     case 'get_datos_cotizacion':
+
                         USER_DATA[ctx.from].cotizacion = JSON.parse(myState3.asis.arguments);
                         USER_DATA[ctx.from].uso_particular = USER_DATA[ctx.from].cotizacion.uso_particular;
                         USER_DATA[ctx.from].procedencia_nacional = USER_DATA[ctx.from].cotizacion.procedencia_nacional;
@@ -432,26 +442,37 @@ const flowPrincipal = addKeyword(['hola', 'menu', 'menù'])
                         USER_DATA[ctx.from].marca = USER_DATA[ctx.from].cotizacion.marca;
                         USER_DATA[ctx.from].modelo = USER_DATA[ctx.from].cotizacion.modelo;
                         USER_DATA[ctx.from].submarca = USER_DATA[ctx.from].cotizacion.submarca;
+
                         return gotoFlow(flowCotizacionAseguradoras);
+
                     case 'get_seguimiento_cotizacion':
+
                         USER_DATA[ctx.from].seguimiento = JSON.parse(myState3.asis.arguments);
                         USER_DATA[ctx.from].folio = USER_DATA[ctx.from].seguimiento.numero_folio;
                         console.log('numero de folio', USER_DATA[ctx.from].folio);
                         return gotoFlow(flowSeguimiento);
+
                     case 'get_carga_comprobante':
+
                         return gotoFlow(flowComprobante);
+
                     case 'get_consulta_poliza':
+
                         USER_DATA[ctx.from].consulta = JSON.parse(myState3.asis.arguments);
                         USER_DATA[ctx.from].consulta_poliza = USER_DATA[ctx.from].consulta.poliza;
                         USER_DATA[ctx.from].nombre = USER_DATA[ctx.from].consulta.nombre_y_apellidos;
                         USER_DATA[ctx.from].telefono = USER_DATA[ctx.from].consulta.telefono;
                         return gotoFlow(flowConsultaPoliza);
+
                     case 'get_solicitud_ejecutivo':
+
                         USER_DATA[ctx.from].ejecutivo = JSON.parse(myState3.asis.arguments);
                         USER_DATA[ctx.from].nombre = USER_DATA[ctx.from].ejecutivo.nombre_y_apellidos;
                         USER_DATA[ctx.from].correo = USER_DATA[ctx.from].ejecutivo.correo;
                         return gotoFlow(flowEjecutivo);
+
                     case 'get_configuracion_aseguradoras':
+
                         return gotoFlow(flowConfiguracion);
                 }
             }
@@ -468,11 +489,13 @@ const flowPrincipal = addKeyword(['hola', 'menu', 'menù'])
             return fallBack(myState3.asis);
         } catch (error) {
             await deleteThreads(USER_DATA[ctx.from].id);
+            delete USER_DATA[ctx.from]
             console.log('Se produjo un error en el flujo de conversacion');
             console.log(error);
         }
     }, [flowStatus, flowSeguimiento, flowComprobante, flowConsultaPoliza, flowPreguntasFiltro, flowCotizacionAseguradoras, flowEjecutivo, flowConfiguracion]);
 
 module.exports = {
-    flowPrincipal
+    flowPrincipal,
+    ESTADO_ASEGURADORAS
 };
